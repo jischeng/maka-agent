@@ -90,6 +90,7 @@ export async function connectRuntimeHostCli(
     clientInstanceId,
     compositionId: INTERACTIVE_RUNTIME_HOST_COMPOSITION_ID,
     candidateEntrypoint: deps.executionCandidateEntrypoint,
+    reportStartupFailure: true,
   } as const;
   const connect = async (signal?: AbortSignal): Promise<RuntimeHostConnection> => {
     if (profile.kind === 'remote') {
@@ -114,6 +115,14 @@ export async function connectRuntimeHostCli(
       );
     }
     if (connected.kind === 'failed') {
+      if (connected.reason === 'migration_blocked') {
+        throw new RuntimeHostPermanentReconnectError(connected.message);
+      }
+      if (connected.reason === 'storage_unavailable') {
+        throw new RuntimeHostPermanentReconnectError(
+          'Maka cannot access this workspace storage. Check disk space, filesystem permissions, and storage health before trying again.',
+        );
+      }
       throw new Error(`Runtime Host startup failed: ${connected.reason}`);
     }
     try {

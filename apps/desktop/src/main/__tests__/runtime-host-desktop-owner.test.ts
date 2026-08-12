@@ -297,6 +297,34 @@ test('keeps reconnecting with bounded backoff until the Desktop adapter is resto
   await owner.close();
 });
 
+test('surfaces a migration blocker as a permanent startup error', async () => {
+  await assert.rejects(
+    startRuntimeHostDesktopOwner({} as DesktopRuntimeHostCandidateStartInput, {
+      startCandidate: async () => ({
+        kind: 'failed',
+        reason: 'migration_blocked',
+        message:
+          'Maka could not migrate this workspace safely, so no changes were committed. Open it with the Maka version that last used it before trying again.',
+      }),
+      onFatalError: () => {},
+    }),
+    /version that last used it/,
+  );
+});
+
+test('surfaces unavailable storage as a permanent startup error', async () => {
+  await assert.rejects(
+    startRuntimeHostDesktopOwner({} as DesktopRuntimeHostCandidateStartInput, {
+      startCandidate: async () => ({
+        kind: 'failed',
+        reason: 'storage_unavailable',
+      }),
+      onFatalError: () => {},
+    }),
+    /disk space, filesystem permissions, and storage health/,
+  );
+});
+
 test('stops reconnecting when the replacement Host is incompatible', async () => {
   const first = candidateHarness();
   let reportFatal!: (error: Error) => void;

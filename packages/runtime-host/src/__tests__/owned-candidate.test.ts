@@ -82,6 +82,21 @@ test('owned candidate settlement requires a clean process exit', async () => {
   assert.equal(await candidate.settle(2_000), false);
 });
 
+test('candidate launcher carries a bounded startup failure', async () => {
+  const rootPath = await mkdtemp(join(tmpdir(), 'maka-owned-candidate-'));
+  const launch = launchOwnedRuntimeHostCandidate({
+    rootPath,
+    expectedRootId: '00000000-0000-4000-8000-000000000001',
+    entrypoint: new URL('./fixtures/owned-candidate-startup-failure.js', import.meta.url),
+    reportStartupFailure: true,
+  });
+  const candidate = await launch.spawned;
+  assert.deepEqual(await candidate.startupFailure, {
+    reason: 'operational_state_migration_blocked',
+  });
+  assert.equal(await candidate.settle(2_000), false);
+});
+
 test('owned candidate can be released to the enclosing environment without termination', async () => {
   const rootPath = await mkdtemp(join(tmpdir(), 'maka-owned-candidate-'));
   const launch = launchOwnedRuntimeHostCandidate({

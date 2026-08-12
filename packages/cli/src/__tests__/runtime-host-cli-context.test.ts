@@ -165,6 +165,37 @@ test('remote CLI profiles pin root identity and resolve credential outside the p
   await context.close();
 });
 
+test('CLI surfaces an actionable migration blocker', async () => {
+  await assert.rejects(
+    connectRuntimeHostCli(
+      { rootPath: '/runtime-host-root', surface: 'run' },
+      {
+        connectOrSpawn: async () => ({
+          kind: 'failed',
+          reason: 'migration_blocked',
+          message: 'Open it with the Maka version that last used it before trying again.',
+        }),
+      },
+    ),
+    /version that last used it/,
+  );
+});
+
+test('CLI surfaces unavailable storage as an actionable permanent error', async () => {
+  await assert.rejects(
+    connectRuntimeHostCli(
+      { rootPath: '/runtime-host-root', surface: 'run' },
+      {
+        connectOrSpawn: async () => ({
+          kind: 'failed',
+          reason: 'storage_unavailable',
+        }),
+      },
+    ),
+    /disk space, filesystem permissions, and storage health/,
+  );
+});
+
 function hostRegistration(overrides: Partial<{ compatibilityEpoch: number }> = {}) {
   return {
     kind: 'maka-runtime-host' as const,

@@ -614,6 +614,7 @@ function connectInput(
     },
     compositionId: INTERACTIVE_RUNTIME_HOST_COMPOSITION_ID,
     candidateEntrypoint: input.candidateEntrypoint,
+    reportStartupFailure: true,
     ...(input.generation === undefined ? {} : { generation: input.generation }),
     ...(input.takeoverHostEpoch === undefined
       ? {}

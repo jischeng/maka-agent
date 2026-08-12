@@ -436,6 +436,7 @@ const sessionCopyOwnerProcessId = randomUUID();
 let remoteHostFailurePromptOpen = false;
 const runtimeHostAtOwnerStart = currentRuntimeHost();
 if (!runtimeHostAtOwnerStart) throw new Error("No Runtime Host target is selected");
+let runtimeHostDesktopStarted = false;
 owner = await startRuntimeHostDesktopOwner(
   {
     rootPath: workspaceRoot,
@@ -591,6 +592,9 @@ owner = await startRuntimeHostDesktopOwner(
         void handleRemoteRuntimeHostFailure(error);
         return;
       }
+      if (runtimeHostDesktopStarted) {
+        dialog.showErrorBox('Maka Runtime Host failed', error.message);
+      }
       app.quit();
     },
   },
@@ -604,6 +608,7 @@ owner = await startRuntimeHostDesktopOwner(
   }
   throw error;
 });
+runtimeHostDesktopStarted = true;
 
 async function handleRemoteRuntimeHostFailure(error: unknown): Promise<never> {
   if (remoteHostFailurePromptOpen) return new Promise<never>(() => undefined);

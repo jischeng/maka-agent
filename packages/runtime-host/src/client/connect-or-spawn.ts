@@ -21,6 +21,7 @@ import {
 import {
   launchDetachedRuntimeHostCandidate,
   launchOwnedRuntimeHostCandidate,
+  type CandidateStartupFailure,
   type CandidateLauncher,
   type OwnedCandidateAttempt,
 } from './launcher.js';
@@ -43,6 +44,7 @@ export interface ConnectOrSpawnRuntimeHostInput {
   connectTimeoutMs?: number;
   handshakeTimeoutMs?: number;
   candidateEntrypoint: string | URL;
+  reportStartupFailure?: boolean;
   signal?: AbortSignal;
 }
 
@@ -69,6 +71,8 @@ export type ConnectOrSpawnRuntimeHostResult =
       reason: 'composition_mismatch';
       requiredCompositionId: string;
     }
+  | { kind: 'failed'; reason: 'migration_blocked'; message: string }
+  | { kind: 'failed'; reason: 'storage_unavailable' }
   | { kind: 'failed'; reason: 'startup_timeout' | 'host_unresponsive' };
 
 export async function connectOrSpawnRuntimeHost(
@@ -107,6 +111,7 @@ export async function connectOwnedRuntimeHostWithDependencies(
       {
         ...input,
         candidateEntrypoint: new URL('../execution-candidate-main.js', import.meta.url),
+        reportStartupFailure: true,
       },
       {
         launchCandidate(candidate) {
@@ -174,8 +179,10 @@ export async function connectOrSpawnRuntimeHostWithDependencies(
   let nextCandidateAt = startedAt;
   let backoffMs = DEFAULT_BACKOFF_MIN_MS;
   let sawUnresponsiveEndpoint = false;
+  let startupFailure: CandidateStartupFailure['reason'] | undefined;
 
   while (performance.now() < deadline) {
+    if (startupFailure) return startupFailureResult(startupFailure);
     input.signal?.throwIfAborted();
     const result = await connectResolvedRuntimeHost({
       capability,
@@ -214,10 +221,14 @@ export async function connectOrSpawnRuntimeHostWithDependencies(
           rootPath: capability.canonicalPath,
           expectedRootId: capability.rootId,
           entrypoint: input.candidateEntrypoint,
+          reportStartupFailure: input.reportStartupFailure,
           initialConnectionTimeoutMs: Math.ceil(remaining),
           ...(input.generation === undefined ? {} : { generation: input.generation }),
         });
-        await settleBeforeDeadline(launch.spawned, deadline, input.signal);
+        const attempt = await settleBeforeDeadline(launch.spawned, deadline, input.signal);
+        void attempt.startupFailure?.then((failure) => {
+          startupFailure ??= failure?.reason;
+        });
       } catch {
         // A failed Candidate attempt is ordinary election evidence; discovery continues.
       }
@@ -231,9 +242,24 @@ export async function connectOrSpawnRuntimeHostWithDependencies(
     await sleep(Math.min(remaining, Math.max(1, Math.round(backoffMs * jitter))), input.signal);
     backoffMs = Math.min(DEFAULT_BACKOFF_MAX_MS, backoffMs * 2);
   }
+  if (startupFailure) return startupFailureResult(startupFailure);
   return {
     kind: 'failed',
     reason: sawUnresponsiveEndpoint ? 'host_unresponsive' : 'startup_timeout',
+  };
+}
+
+function startupFailureResult(
+  reason: CandidateStartupFailure['reason'],
+): ConnectOrSpawnRuntimeHostResult {
+  if (reason === 'operational_state_storage_unavailable') {
+    return { kind: 'failed', reason: 'storage_unavailable' };
+  }
+  return {
+    kind: 'failed',
+    reason: 'migration_blocked',
+    message:
+      'Maka could not migrate this workspace safely, so no changes were committed. Open it with the Maka version that last used it, then repair or recover the workspace before trying again.',
   };
 }
 

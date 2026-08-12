@@ -123,6 +123,65 @@ describe('non-serving Runtime Host kernel', () => {
     });
   });
 
+  test('returns a stable migration blocker reported by a Candidate', async () => {
+    await withHostPaths(async (paths) => {
+      const result = await connectOrSpawnRuntimeHostWithDependencies(
+        {
+          rootPath: paths.root,
+          surface: 'inspect',
+          protocol: CURRENT_PROTOCOL,
+          compositionId: KERNEL_COMPOSITION.descriptor.id,
+          candidateEntrypoint: KERNEL_CANDIDATE_ENTRYPOINT,
+          electionDeadlineMs: 100,
+        },
+        {
+          random: () => 0.5,
+          launchCandidate: () => ({
+            spawned: Promise.resolve({
+              pid: process.pid,
+              startupFailure: Promise.resolve({
+                reason: 'operational_state_migration_blocked',
+              }),
+            }),
+          }),
+        },
+      );
+      assert.deepEqual(result, {
+        kind: 'failed',
+        reason: 'migration_blocked',
+        message:
+          'Maka could not migrate this workspace safely, so no changes were committed. Open it with the Maka version that last used it, then repair or recover the workspace before trying again.',
+      });
+    });
+  });
+
+  test('returns a storage failure reported by a Candidate without waiting for timeout', async () => {
+    await withHostPaths(async (paths) => {
+      const result = await connectOrSpawnRuntimeHostWithDependencies(
+        {
+          rootPath: paths.root,
+          surface: 'inspect',
+          protocol: CURRENT_PROTOCOL,
+          compositionId: KERNEL_COMPOSITION.descriptor.id,
+          candidateEntrypoint: KERNEL_CANDIDATE_ENTRYPOINT,
+          electionDeadlineMs: 100,
+        },
+        {
+          random: () => 0.5,
+          launchCandidate: () => ({
+            spawned: Promise.resolve({
+              pid: process.pid,
+              startupFailure: Promise.resolve({
+                reason: 'operational_state_storage_unavailable',
+              }),
+            }),
+          }),
+        },
+      );
+      assert.deepEqual(result, { kind: 'failed', reason: 'storage_unavailable' });
+    });
+  });
+
   test('service lifecycle remains ready until explicitly closed', async () => {
     await withHostPaths(async (paths) => {
       const capability = await resolveStorageRoot({ path: paths.root, kind: 'interactive' });

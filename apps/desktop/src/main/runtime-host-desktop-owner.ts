@@ -400,6 +400,14 @@ class RuntimeHostDesktopOwnerImpl implements RuntimeHostDesktopOwner {
         await this.waitForHostRetirement(result.registration, signal);
         continue;
       }
+      if (result.kind === 'failed' && result.reason === 'migration_blocked') {
+        throw new RuntimeHostPermanentReconnectError(result.message);
+      }
+      if (result.kind === 'failed' && result.reason === 'storage_unavailable') {
+        throw new RuntimeHostPermanentReconnectError(
+          'Maka cannot access this workspace storage. Check disk space, filesystem permissions, and storage health before trying again.',
+        );
+      }
       throw new Error(`Runtime Host startup failed: ${result.reason}`);
     }
   }
