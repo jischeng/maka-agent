@@ -377,6 +377,7 @@ export const TurnView = memo(function TurnView(props: {
      */
     runningStatus?: boolean;
     providerRetry?: ProviderRetryEvent;
+    initialLiveContent?: ReadonlyMap<string, string>;
   };
   /**
    * Injected host reader for image attachment bytes. Threaded down to the user
@@ -590,6 +591,7 @@ export const TurnView = memo(function TurnView(props: {
                   key={`processing-${item.id}`}
                   entries={item.children}
                   onOpenLinkedSession={props.onOpenLinkedSession}
+                  initialLiveContent={props.liveStreaming?.initialLiveContent}
                 />
               ) : (
                 <TurnTimelineEntry
@@ -597,6 +599,7 @@ export const TurnView = memo(function TurnView(props: {
                   item={item}
                   onStreamingSettled={props.liveStreaming?.onStreamingSettled}
                   onOpenLinkedSession={props.onOpenLinkedSession}
+                  initialLiveContent={props.liveStreaming?.initialLiveContent}
                 />
               ),
             )}
@@ -927,7 +930,7 @@ export function ModelProviderRetryIndicator(props: { retry: ProviderRetryEvent }
   );
 }
 
-function StreamingAssistantBubble(props: { text: string; live: boolean; truncated?: boolean; onSettled?: () => void }) {
+function StreamingAssistantBubble(props: { text: string; live: boolean; initialText?: string; truncated?: boolean; onSettled?: () => void }) {
   const copy = getConversationCopy(useUiLocale()).messages;
   const settledRef = useRef(false);
 
@@ -943,7 +946,12 @@ function StreamingAssistantBubble(props: { text: string; live: boolean; truncate
 
   return (
     <ChatMessageBubble variant="ghost" className="maka-chat-message-bubble maka-chat-message-bubble-assistant maka-bubble-streaming">
-      <Markdown text={props.text} streaming={props.live} density="compact" />
+      <Markdown
+        text={props.text}
+        streaming={props.live}
+        initialText={props.initialText}
+        density="compact"
+      />
       {props.truncated && (
         <Tooltip content={copy.outputTruncatedTitle}>
           {/* Colour-name archive, not the semantic one: Astryx paints
@@ -979,10 +987,18 @@ function TurnTimelineEntry(props: {
   item: TurnTimelineItem;
   onStreamingSettled?: (messageId?: string) => void;
   onOpenLinkedSession?(sessionId: string): void;
+  initialLiveContent?: ReadonlyMap<string, string>;
 }) {
   const { item } = props;
   if (item.kind === 'thinking') {
-    return <DeepThinking text={item.text} live={item.live === true} truncated={item.truncated === true} />;
+    return (
+      <DeepThinking
+        text={item.text}
+        live={item.live === true}
+        initialText={props.initialLiveContent?.get(`thinking:${item.messageId}`)}
+        truncated={item.truncated === true}
+      />
+    );
   }
   if (item.kind === 'tools') {
     return <ToolTrow items={item.items} onOpenLinkedSession={props.onOpenLinkedSession} />;
@@ -992,6 +1008,7 @@ function TurnTimelineEntry(props: {
       <StreamingAssistantBubble
         text={item.text}
         live={item.complete !== true}
+        initialText={props.initialLiveContent?.get(`text:${item.messageId}`)}
         truncated={item.truncated === true}
         onSettled={() => props.onStreamingSettled?.(item.messageId)}
       />
@@ -1003,6 +1020,7 @@ function TurnTimelineEntry(props: {
 function ProcessingBlock(props: {
   entries: FoldedTimelineChild[];
   onOpenLinkedSession?(sessionId: string): void;
+  initialLiveContent?: ReadonlyMap<string, string>;
 }) {
   const { entries } = props;
   return (
@@ -1012,16 +1030,22 @@ function ProcessingBlock(props: {
           key={timelineEntryKey(entry, index)}
           item={entry}
           onOpenLinkedSession={props.onOpenLinkedSession}
+          initialLiveContent={props.initialLiveContent}
         />
       ))}
     </div>
   );
 }
 
-function DeepThinking(props: { text: string; live: boolean; truncated?: boolean }) {
+function DeepThinking(props: { text: string; live: boolean; initialText?: string; truncated?: boolean }) {
   const copy = getConversationCopy(useUiLocale()).messages;
   const safeText = redactSecrets(props.text);
-  const displayed = useStreamingText(safeText, isProgressiveStreamingEnabled(props.live));
+  const initialDisplayedLength = props.initialText === undefined
+    ? undefined
+    : redactSecrets(props.initialText).length;
+  const displayed = useStreamingText(safeText, isProgressiveStreamingEnabled(props.live), {
+    initialDisplayedLength,
+  });
   const label = props.truncated ? `${copy.thinking} · ${copy.truncated}` : copy.thinking;
   return (
     <ChatReasoning
