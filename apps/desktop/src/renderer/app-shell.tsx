@@ -2262,12 +2262,22 @@ function AppShellContent({
     themePalette,
     themePref,
   });
+  const [activeEventSeed, setActiveEventSeed] = useState({
+    sessionId: undefined as string | undefined,
+    revision: 0,
+  });
   useActiveSessionEvents({
     uiLocale,
     activeId,
     activeIdRef,
     handleEvent,
     markSessionReadLocally,
+    onEventSeeded: (sessionId) => {
+      setActiveEventSeed((current) => ({
+        sessionId,
+        revision: current.revision + 1,
+      }));
+    },
     setMessageLoadErrorBySession,
     setMessageLoadPending,
     setMessages,
@@ -2882,6 +2892,9 @@ function AppShellContent({
                   <ChatMessageSurface
                 sessionUiController={sessionUiController}
                 activeSessionId={activeId}
+                liveContentSeedRevision={activeEventSeed.sessionId === activeId
+                  ? activeEventSeed.revision
+                  : 0}
                 messages={messages}
                 messageLoading={activeMessageLoading}
                 runningStatus={showRunningStatus}

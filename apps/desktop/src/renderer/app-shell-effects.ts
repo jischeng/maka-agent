@@ -396,6 +396,7 @@ export function useActiveSessionEvents(options: {
   activeIdRef: RefBox<string | undefined>;
   handleEvent: (sessionId: string, event: SessionEvent) => void;
   markSessionReadLocally: (sessionId: string, readMessages: readonly StoredMessage[]) => void;
+  onEventSeeded?: (sessionId: string) => void;
   setMessageLoadErrorBySession: (updater: (current: Record<string, string>) => Record<string, string>) => void;
   setMessageLoadPending: (pending: boolean) => void;
   setMessages: (messages: StoredMessage[]) => void;
@@ -435,6 +436,9 @@ export function useActiveSessionEvents(options: {
       };
     });
     options.handleEvent(sessionId, event);
+  });
+  const markEventSeeded = useEffectEvent((sessionId: string) => {
+    options.onEventSeeded?.(sessionId);
   });
   const markSessionEventStreamClosed = useEffectEvent((sessionId: string) => {
     options.setSessionEventHealthBySession((current) => {
@@ -477,9 +481,13 @@ export function useActiveSessionEvents(options: {
       .catch((error) => {
         applyReadError(activeId, error, () => disposed);
       });
-    const unsubscribe = window.maka.sessions.subscribeEvents(activeId, (event) => {
-      handleSessionEvent(activeId, event);
-    });
+    const unsubscribe = window.maka.sessions.subscribeEvents(
+      activeId,
+      (event) => {
+        handleSessionEvent(activeId, event);
+      },
+      () => markEventSeeded(activeId),
+    );
     return () => {
       disposed = true;
       unsubscribe();
