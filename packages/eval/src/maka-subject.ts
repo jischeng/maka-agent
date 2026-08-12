@@ -46,6 +46,24 @@ export function createMakaSubjectAdapter(): SubjectAdapter {
       } catch {
         return subjectFailure('relay-execute', startedAt, context.signal);
       }
+      if (process.termination !== 'exited') {
+        const projection = tryDecodeMatchingProjection(process.stdout, executionId);
+        const settled = projection?.kind === 'settled' ? projection : undefined;
+        return {
+          usage: settled?.usage ?? null,
+          costUsd: settled?.costUsd ?? null,
+          durationMs: Date.now() - startedAt,
+          status:
+            process.termination === 'framework_timeout'
+              ? ('failed' as const)
+              : ('indeterminate' as const),
+          failureReason:
+            process.termination === 'framework_timeout'
+              ? 'Maka subject exceeded the framework timeout'
+              : 'Maka subject cancelled',
+          artifacts: [],
+        };
+      }
       if (process.stdout.length === 0) {
         return subjectFailure('empty-output', startedAt, context.signal, process);
       }
@@ -88,12 +106,6 @@ export function createMakaSubjectAdapter(): SubjectAdapter {
         failureReason,
         artifacts: [],
       });
-      if (process.termination === 'cancelled') {
-        return result('indeterminate', 'Maka subject cancelled');
-      }
-      if (process.termination === 'framework_timeout') {
-        return result('failed', 'Maka subject exceeded the framework timeout');
-      }
       if (process.exitCode !== 0) {
         return result('indeterminate', 'Maka execution shim did not settle cleanly');
       }
@@ -108,6 +120,19 @@ export function createMakaSubjectAdapter(): SubjectAdapter {
       );
     },
   };
+}
+
+function tryDecodeMatchingProjection(
+  stdout: string,
+  executionId: string,
+): ReturnType<typeof decodeHostedExecutionProjection> | undefined {
+  if (stdout.length === 0) return undefined;
+  try {
+    const projection = decodeHostedExecutionProjection(JSON.parse(stdout) as unknown);
+    return projection.executionId === executionId ? projection : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function safeFailureReason(value: string, fallback: string): string {
