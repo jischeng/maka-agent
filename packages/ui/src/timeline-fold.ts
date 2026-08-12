@@ -10,22 +10,18 @@ import type { TurnTimelineItem } from './materialize.js';
  * before rendering:
  *
  *  - answer `text` entries stay in place and are the only grouping boundary;
- *  - a maximal thinking+tools run between two texts folds into ONE
- *    `processing` block when it contains at least one tools group, preserving
- *    the run's interleaved order as `children`;
- *  - a pure-thinking run stays bare (the 深度思考 disclosure renders it
- *    directly — wrapping a lone reasoning block would just double the fold).
+ *  - a maximal thinking+tools run between two texts folds into ONE stable
+ *    `processing` sequence, preserving the run's interleaved order as
+ *    `children` even before its first tool arrives;
  *
  * Each block carries a stable `id` derived from the PRECEDING answer text's
  * messageId (`'start'` when the block opens the turn). Between two texts there
  * is at most one block, so the id is unique per turn — and, unlike a key
  * guessed from the first child, it survives the first tool being projected
  * away (shell-run folding) without remounting the disclosure or dropping a
- * manual open/close. When projection removes a block's LAST tools group the
- * block itself dissolves (the remaining run is pure thinking), so the bare
- * 深度思考 entries remount and any manual open state inside is reset — the
- * accepted cost of deriving block existence at render time instead of
- * representing a tools-less block in the model.
+ * manual open/close. Keeping a pure-thinking run in that same layout-only
+ * sequence also prevents a live reasoning entry from remounting when the
+ * runtime emits `tool_start` before `thinking_complete`.
  */
 
 /** An entry folded inside a processing block: reasoning or a tool group. */
@@ -46,11 +42,7 @@ export function foldTimeline(items: readonly TurnTimelineItem[]): FoldedTimeline
   let buffer: FoldedTimelineChild[] | null = null;
   const flush = (): void => {
     if (buffer && buffer.length > 0) {
-      if (buffer.some((child) => child.kind === 'tools')) {
-        out.push({ kind: 'processing', id: anchor, children: buffer });
-      } else {
-        out.push(...buffer);
-      }
+      out.push({ kind: 'processing', id: anchor, children: buffer });
     }
     buffer = null;
   };
